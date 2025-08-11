@@ -6,29 +6,6 @@ const Loan = require("../models/Loan");
 const bcrypt = require("bcryptjs");
 const authMiddleware = require("../middleware/authMiddleware");
 
-// Submit a cleanup request
-router.post("/request-cleanup", async (req, res) => {
-  try {
-    const { fullName, phoneNumber, location } = req.body;
-
-    // Validate input
-    if (!fullName || !phoneNumber || !location) {
-      return res.status(400).json({ message: "All fields are required." });
-    }
-
-    // Save the request to the database
-    const newRequest = new CleanUpRequest({ fullName, phoneNumber, location });
-    await newRequest.save();
-
-    res
-      .status(201)
-      .json({ message: "Request submitted successfully!", newRequest });
-  } catch (error) {
-    console.error("Error submitting request:", error);
-    res.status(500).json({ message: "Failed to submit request." });
-  }
-});
-
 // Fetch current user profile
 router.get("/profile", authMiddleware, async (req, res) => {
   try {

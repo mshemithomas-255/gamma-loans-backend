@@ -107,9 +107,6 @@ app.use("/api/users", authRoutes);
 // loan user routes
 app.use("/api/loans", loanRoutes);
 
-// transport request routes
-app.use("/api/transport", transportRequestRoutes);
-app.use("/api/garbage", garbageCollectionRoutes);
 app.use("/api/users", userRoutes);
 
 // admin login routes
@@ -118,14 +115,6 @@ app.use("/api/admin", adminRoutes);
 
 // mpesa payment routes
 app.use("/api/payments", paymentRoutes);
-
-// Garbage collection routes
-app.use("/api/auth", require("./src/routes/authRoutes"));
-app.use("/api/users", require("./src/routes/userRoutes"));
-app.use("/api/locations", require("./src/routes/locationRoutes"));
-app.use("/api/plots", require("./src/routes/plotRoutes"));
-app.use("/api/payments", require("./src/routes/paymentRoutes"));
-app.use("/api/expenses", require("./src/routes/expenseRoutes"));
 
 // Database Connection
 connectDB();
