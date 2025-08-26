@@ -486,6 +486,72 @@ router.post(
   }
 );
 
+// Get loans organized by month and status
+router.get("/loans/organized-by-month", authMiddleware, async (req, res) => {
+  try {
+    const { year, month } = req.query;
+
+    // Build date filter if specific month/year is requested
+    let dateFilter = {};
+    if (year && month) {
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+      dateFilter.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
+    const loans = await Loan.find(dateFilter)
+      .populate("userId", "fullName email phoneNumber")
+      .sort({ createdAt: -1 });
+
+    // Organize loans by month and status
+    const organizedLoans = {};
+
+    loans.forEach((loan) => {
+      const loanDate = new Date(loan.createdAt);
+      const monthYear = `${loanDate.getFullYear()}-${(loanDate.getMonth() + 1)
+        .toString()
+        .padStart(2, "0")}`;
+      const monthName = loanDate.toLocaleString("default", {
+        month: "long",
+        year: "numeric",
+      });
+
+      if (!organizedLoans[monthYear]) {
+        organizedLoans[monthYear] = {
+          month: monthName,
+          monthKey: monthYear,
+          approved: [],
+          partiallyPaid: [],
+          fullyPaid: [],
+          defaulted: [],
+          pending: [],
+          rejected: [],
+        };
+      }
+
+      // Categorize by status
+      if (loan.status === "approved") {
+        organizedLoans[monthYear].approved.push(loan);
+      } else if (loan.status === "partially paid") {
+        organizedLoans[monthYear].partiallyPaid.push(loan);
+      } else if (loan.status === "fully paid") {
+        organizedLoans[monthYear].fullyPaid.push(loan);
+      } else if (loan.status === "defaulted") {
+        organizedLoans[monthYear].defaulted.push(loan);
+      } else if (loan.status === "pending") {
+        organizedLoans[monthYear].pending.push(loan);
+      } else if (loan.status === "rejected") {
+        organizedLoans[monthYear].rejected.push(loan);
+      }
+    });
+
+    res.status(200).json(organizedLoans);
+  } catch (error) {
+    console.error("Error fetching organized loans:", error);
+    res.status(500).json({ message: "Failed to fetch organized loans" });
+  }
+});
+
 // Get user loan history with payments
 router.get("/users/:userId/loan-history", authMiddleware, async (req, res) => {
   try {
