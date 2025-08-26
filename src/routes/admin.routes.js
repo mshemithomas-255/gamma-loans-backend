@@ -235,6 +235,8 @@ router.put("/partial-payment/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// add collected interest to the loan
+// this is used when the loan is fully paid
 router.put("/extend-repayment/:id", authMiddleware, async (req, res) => {
   try {
     const loan = await Loan.findById(req.params.id);
@@ -397,25 +399,25 @@ router.put("/users/:userId/loan-limits", authMiddleware, async (req, res) => {
   }
 });
 
-router.get("/users/:userId/loan-limits", authMiddleware, async (req, res) => {
-  try {
-    const user = await User.findById(req.params.userId)
-      .select("loanLimits limitHistory")
-      .populate("limitHistory.changedBy", "fullName");
+// router.get("/users/:userId/loan-limits", authMiddleware, async (req, res) => {
+//   try {
+//     const user = await User.findById(req.params.userId)
+//       .select("loanLimits limitHistory")
+//       .populate("limitHistory.changedBy", "fullName");
 
-    if (!user) return res.status(404).json({ message: "User not found." });
+//     if (!user) return res.status(404).json({ message: "User not found." });
 
-    res.json({
-      limits: user.loanLimits,
-      history: user.limitHistory,
-    });
-  } catch (error) {
-    console.error("Error fetching loan limits:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to fetch loan limits.", error: error.message });
-  }
-});
+//     res.json({
+//       limits: user.loanLimits,
+//       history: user.limitHistory,
+//     });
+//   } catch (error) {
+//     console.error("Error fetching loan limits:", error);
+//     res
+//       .status(500)
+//       .json({ message: "Failed to fetch loan limits.", error: error.message });
+//   }
+// });
 
 router.post(
   "/users/:userId/check-eligibility",
@@ -483,6 +485,42 @@ router.post(
     }
   }
 );
+
+// Get user loan history with payments
+router.get("/users/:userId/loan-history", authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const loans = await Loan.find({ userId })
+      .populate("userId", "fullName email phoneNumber")
+      .sort({ createdAt: -1 });
+
+    // Format the response to include payment details
+    const loanHistory = loans.map((loan) => ({
+      _id: loan._id,
+      loanAmount: loan.loanAmount,
+      totalRepayment: loan.totalRepayment,
+      paidAmount: loan.paidAmount,
+      remainingBalance: loan.remainingBalance,
+      status: loan.status,
+      repaymentDate: loan.repaymentDate,
+      createdAt: loan.createdAt,
+      category: loan.category,
+      payments: loan.payments.map((payment) => ({
+        amount: payment.amount,
+        date: payment.date,
+        reference: payment.reference,
+        phone: payment.phone,
+        transactionDate: payment.transactionDate,
+      })),
+    }));
+
+    res.status(200).json(loanHistory);
+  } catch (error) {
+    console.error("Error fetching user loan history:", error);
+    res.status(500).json({ message: "Failed to fetch user loan history" });
+  }
+});
 
 // Add this route with your other loan operation routes
 router.put("/edit-repayment-date/:id", authMiddleware, async (req, res) => {
