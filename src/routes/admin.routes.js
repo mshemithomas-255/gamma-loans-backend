@@ -304,14 +304,37 @@ router.put("/mark-defaulted/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// User management
+// Get all users with populated loans
 router.get("/users", authMiddleware, async (req, res) => {
   try {
-    const users = await User.find({ role: { $ne: "admin" } });
+    const users = await User.find({ role: { $ne: "admin" } }).populate({
+      path: "loans",
+      select:
+        "loanAmount status repaymentDate paidAmount remainingBalance createdAt",
+    });
     res.json(users);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to fetch users." });
+  }
+});
+
+// Get single user with detailed loan history
+router.get("/users/:id", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).populate({
+      path: "loans",
+      select:
+        "loanAmount interest totalRepayment paidAmount remainingBalance status repaymentDate createdAt category payments",
+      options: { sort: { createdAt: -1 } },
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch user." });
   }
 });
 
@@ -399,25 +422,25 @@ router.put("/users/:userId/loan-limits", authMiddleware, async (req, res) => {
   }
 });
 
-// router.get("/users/:userId/loan-limits", authMiddleware, async (req, res) => {
-//   try {
-//     const user = await User.findById(req.params.userId)
-//       .select("loanLimits limitHistory")
-//       .populate("limitHistory.changedBy", "fullName");
+router.get("/users/:userId/loan-limits", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .select("loanLimits limitHistory")
+      .populate("limitHistory.changedBy", "fullName");
 
-//     if (!user) return res.status(404).json({ message: "User not found." });
+    if (!user) return res.status(404).json({ message: "User not found." });
 
-//     res.json({
-//       limits: user.loanLimits,
-//       history: user.limitHistory,
-//     });
-//   } catch (error) {
-//     console.error("Error fetching loan limits:", error);
-//     res
-//       .status(500)
-//       .json({ message: "Failed to fetch loan limits.", error: error.message });
-//   }
-// });
+    res.json({
+      limits: user.loanLimits,
+      history: user.limitHistory,
+    });
+  } catch (error) {
+    console.error("Error fetching loan limits:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch loan limits.", error: error.message });
+  }
+});
 
 router.post(
   "/users/:userId/check-eligibility",
@@ -999,6 +1022,50 @@ router.get("/available-months", async (req, res) => {
   } catch (error) {
     console.error("Error fetching available months:", error);
     res.status(500).json({ error: "Failed to fetch available months" });
+  }
+});
+
+router.get("/users/:userId/loan-history", authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Verify user exists
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    // Get loans through the populated user
+    const userWithLoans = await User.findById(userId).populate({
+      path: "loans",
+      select:
+        "loanAmount interest totalRepayment paidAmount remainingBalance status repaymentDate createdAt category payments paymentRequests",
+      options: { sort: { createdAt: -1 } },
+    });
+
+    res.status(200).json({
+      user: {
+        _id: userWithLoans._id,
+        fullName: userWithLoans.fullName,
+        email: userWithLoans.email,
+        mobileNumber: userWithLoans.mobileNumber,
+      },
+      loans: userWithLoans.loans,
+      totalLoans: userWithLoans.loans.length,
+      totalBorrowed: userWithLoans.loans.reduce(
+        (sum, loan) => sum + loan.loanAmount,
+        0
+      ),
+      totalPaid: userWithLoans.loans.reduce(
+        (sum, loan) => sum + loan.paidAmount,
+        0
+      ),
+      totalOutstanding: userWithLoans.loans.reduce(
+        (sum, loan) => sum + loan.remainingBalance,
+        0
+      ),
+    });
+  } catch (error) {
+    console.error("Error fetching user loan history:", error);
+    res.status(500).json({ message: "Failed to fetch user loan history" });
   }
 });
 
