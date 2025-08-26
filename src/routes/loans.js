@@ -6,7 +6,7 @@ const authMiddleware = require("../middleware/authMiddleware.js");
 
 // Apply for a loan with limit checks
 router.post("/apply", authMiddleware, async (req, res) => {
-  const { loanAmount } = req.body; // Removed repaymentDate from destructuring
+  const { loanAmount } = req.body;
   const userId = req.user.id;
 
   try {
@@ -30,7 +30,7 @@ router.post("/apply", authMiddleware, async (req, res) => {
     // Check active loans
     const activeLoan = await Loan.findOne({
       userId,
-      status: { $nin: ["fully paid", "rejected"] },
+      status: { $nin: ["fully paid", "rejected", "defaulted"] },
     });
 
     if (activeLoan) {
@@ -50,6 +50,36 @@ router.post("/apply", authMiddleware, async (req, res) => {
         message: `Loan amount exceeds your per-loan limit of ${user.loanLimits.maxLoanAmountPerRequest}`,
         code: "LOAN_LIMIT_EXCEEDED",
         limitInfo: user.loanLimits,
+      });
+    }
+
+    // Check total outstanding against user limits
+    const totalOutstanding = await Loan.aggregate([
+      {
+        $match: {
+          userId: user._id,
+          status: { $in: ["approved", "partially paid"] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$remainingBalance" },
+        },
+      },
+    ]);
+
+    const currentOutstanding = totalOutstanding[0]?.total || 0;
+    if (
+      user.loanLimits?.maxTotalLoanAmount > 0 &&
+      currentOutstanding + parseFloat(loanAmount) >
+        user.loanLimits.maxTotalLoanAmount
+    ) {
+      return res.status(400).json({
+        message: `Loan amount would exceed your total outstanding limit of ${user.loanLimits.maxTotalLoanAmount}`,
+        code: "TOTAL_LIMIT_EXCEEDED",
+        limitInfo: user.loanLimits,
+        currentOutstanding,
       });
     }
 
@@ -75,8 +105,11 @@ router.post("/apply", authMiddleware, async (req, res) => {
 
     await loan.save();
 
+    // Add loan reference to user's loans array
+    await User.findByIdAndUpdate(userId, { $push: { loans: loan._id } });
+
     res.status(201).json({
-      message: "Loan application submitted!",
+      message: "Loan application submitted successfully!",
       loan: {
         ...loan.toObject(),
         interestRate: "20%",
